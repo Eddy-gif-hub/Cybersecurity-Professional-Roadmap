@@ -115,3 +115,131 @@ Un switch recibe una trama con origen `AA-AA` por `Fa0/1`. Su tabla está vacía
 ### Ejercicio 2 — Reenvío selectivo
 
 La tabla contiene `AA-AA → Fa0/1` y `BB-BB → Fa0/2`. PC-C, conectado a `Fa0/3`, envía una trama destinada
+
+ 
+
+## 11. Laboratorio práctico: Spanning Tree Protocol (STP)
+
+### 11.1 Objetivo
+
+Implementar una topología redundante de tres switches en Cisco Packet Tracer para comprobar cómo STP evita bucles de capa 2 y mantiene la conectividad cuando falla un enlace.
+
+### 11.2 Topología
+
+Se utilizaron tres switches Cisco 2960 conectados inicialmente en forma de triángulo:
+
+- **S1:** Root Bridge.
+- **S2:** switch intermedio.
+- **S3:** switch con una ruta alternativa.
+- **PC0:** `192.168.10.10/24`.
+- **PC1:** `192.168.10.20/24`.
+
+Las dos PCs se configuraron en la misma subred para probar la conectividad de capa 2.
+
+### 11.3 Configuración del Root Bridge
+
+En S1 se configuró una prioridad inferior a la predeterminada:
+
+```text
+enable
+configure terminal
+spanning-tree vlan 1 priority 4096
+end
+show spanning-tree vlan 1
+```
+
+**Resultado:** S1 fue elegido Root Bridge para la VLAN 1. La prioridad efectiva mostrada fue 4097, correspondiente a la prioridad configurada más el identificador de VLAN.
+
+### 11.4 Verificación de roles y estados
+
+Comando utilizado:
+
+```text
+show spanning-tree vlan 1
+```
+
+Campos importantes:
+
+- `Root ID`: identifica el Root Bridge.
+- `Bridge ID`: identifica al switch local.
+- `Root Cost`: costo acumulado de la ruta seleccionada hacia el Root Bridge.
+- `Root`: puerto que proporciona la mejor ruta hacia la raíz.
+- `Desg`: puerto designado para el segmento.
+- `Altn`: puerto alternativo.
+- `FWD`: estado Forwarding.
+- `BLK`: estado Blocking en STP clásico.
+- `LRN`: estado Learning.
+
+En la topología triangular, STP mantuvo una ruta alternativa sin reenviar tráfico de usuario, evitando que todos los enlaces redundantes estuvieran activos simultáneamente para el reenvío.
+
+### 11.5 Prueba de falla del enlace
+
+Se desconectó el enlace directo entre S1 y S3.
+
+Antes de la desconexión, S3 utilizaba un puerto como Root Port y mantenía otro como Alternate/Blocking.
+
+Después de la desconexión:
+
+- S3 perdió su ruta directa hacia S1.
+- STP detectó el cambio de topología.
+- El puerto alternativo pasó a desempeñar la función de Root Port.
+- La ruta alternativa pasó a Forwarding tras la convergencia.
+- S3 alcanzó S1 a través de S2.
+
+El costo acumulado hacia la raíz pasó de 19 a 38:
+
+```text
+19 + 19 = 38
+```
+
+Esto se debe a que la nueva ruta utiliza dos enlaces, cada uno con costo 19.
+
+### 11.6 Prueba de conectividad
+
+Direcciones configuradas:
+
+| Equipo | Dirección IPv4 | Máscara |
+|---|---|---|
+| PC0 | `192.168.10.10` | `255.255.255.0` |
+| PC1 | `192.168.10.20` | `255.255.255.0` |
+
+Desde PC0 se ejecutó:
+
+```text
+ping 192.168.10.20
+```
+
+**Resultado observado:** 4 paquetes enviados, 4 recibidos y 0 % de pérdida.
+
+La prueba confirmó que PC0 podía comunicarse con PC1 a través de la ruta disponible.
+
+### 11.7 Verificación de la tabla MAC
+
+Comando utilizado:
+
+```text
+show mac address-table dynamic
+```
+
+La tabla mostró una dirección MAC dinámica asociada a un puerto de S3.
+
+El switch aprende las direcciones MAC de origen de las tramas recibidas y las asocia con el puerto de entrada. Después consulta la MAC de destino para decidir por dónde reenviar la trama.
+
+### 11.8 Conclusiones
+
+1. STP elige un Root Bridge mediante el Bridge ID.
+2. Los switches no raíz seleccionan un Root Port según los criterios de STP.
+3. Los puertos alternativos permiten conservar redundancia sin crear bucles.
+4. Una falla de enlace puede provocar una reconvergencia y cambiar los roles y estados de los puertos.
+5. El costo de ruta aumenta cuando se utiliza un camino con más enlaces.
+6. La tabla MAC permite asociar direcciones MAC con los puertos por los que se aprendieron.
+7. La prueba de ping confirmó la conectividad entre las PCs después de la recuperación de la ruta.
+
+### 11.9 Comandos de diagnóstico utilizados
+
+| Comando | Propósito |
+|---|---|
+| `show spanning-tree vlan 1` | Consultar el Root Bridge, roles, estados y costos STP. |
+| `show mac address-table dynamic` | Consultar las direcciones MAC dinámicas aprendidas. |
+| `ping 192.168.10.20` | Comprobar conectividad IP entre las PCs. |
+
